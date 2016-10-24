@@ -4,16 +4,52 @@
  * Сделано задание на звездочку
  * Реализовано оба метода и tryLater
  */
-exports.isStar = true;
+exports.isStar = false;
 
 var WEEK = {
     ПН: 10,
     ВТ: 11,
-    СР: 12
+    СР: 12,
+    Mon: 'ПН',
+    Tue: 'ВТ',
+    Wed: 'СР'
 };
 
 var HOUR = 60 * 60 * 1000;
 var bankGMT;
+
+function getTimePoint(busyTime, type, label) {
+    function getTime(value) {
+        value += bankGMT.value * HOUR;
+        var date = new Date(value).toUTCString();
+        var day = date.match(/^[a-z]{3}/i)[0];
+        day = WEEK[day];
+        var time = date.match(/\d\d:\d\d:\d\d/)[0];
+
+        return { day: day, hours: time.match(/\d\d/g)[0], minutes: time.match(/\d\d/g)[1] };
+    }
+
+    var day = busyTime.match(/^[А-Я][А-Я]/)[0];
+    day = WEEK[day];
+    var hour = busyTime.match(/\d\d:\d\d/);
+    busyTime = '2016-10-' + day + 'T' + hour + ':00' + getUTC(busyTime).note;
+    var value = Date.parse(busyTime);
+    var time = getTime(value);
+
+    return { type: type, label: label, time: time, value: value };
+}
+
+
+function getUTC(time) {
+    var UTC = time.match(/\d$/);
+    if (UTC === null) {
+        return '';
+    }
+    var value = parseInt(UTC);
+    UTC = UTC[0].length > 1 ? UTC : '0' + UTC;
+
+    return { note: '+' + UTC + '00', value: value };
+}
 
 /**
  * @param {Object} schedule – Расписание Банды
@@ -30,63 +66,36 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     var robberyTimePoints = [];
     duration = duration * 60 * 1000;
 
-    function convertTime(time) {
-        var day = time.match(/^[А-Я][А-Я]/);
-        day = WEEK[day];
-        var hour = time.match(/\d\d:\d\d/);
-        time = '2016-10-' + day + 'T' + hour + ':00' + getGMT(time).string;
-        // 2016-10-10T08:15:00-05:00
+    bankGMT = getUTC(workingHours.from);
 
-        return Date.parse(time);
+    function getBankTimePoints() {
+        var dayStart = 'ПН 00:00+' + bankGMT.value;
+        var dayEnd = 'СР 23:59+' + bankGMT.value;
+
+        timePoints.push(
+            getTimePoint(dayStart, 'from', 'Bank'),
+            getTimePoint(dayEnd, 'to', 'Bank')
+        );
+
+        ['ПН', 'ВТ', 'СР'].forEach(function (day) {
+            var open = day + ' ' + workingHours.from;
+            var close = day + ' ' + workingHours.to;
+
+            timePoints.push(
+                getTimePoint(close, 'from', 'Bank'),
+                getTimePoint(open, 'to', 'Bank')
+            );
+        });
     }
 
     function getGangTimePoints() {
         Object.keys(schedule).forEach(function (robber) {
             schedule[robber].forEach(function (busyTime) {
                 timePoints.push(
-                    { type: 'from', time: busyTime.from, value: convertTime(busyTime.from),
-                        label: robber },
-                    { type: 'to', time: busyTime.to, value: convertTime(busyTime.to),
-                        label: robber }
+                    getTimePoint(busyTime.from, 'from', robber),
+                    getTimePoint(busyTime.to, 'to', robber)
                 );
             });
-        });
-    }
-
-    function getGMT(time) {
-        var sign;
-        var value;
-        try {
-            sign = time.match(/[\+\-]/)[0];
-            value = time.match(/\d$/)[0];
-        } catch (err) {
-            return { string: '', value: 0 };
-        }
-        var string = value > 10 ? value : ('0' + value);
-        string += ':00';
-        value = parseInt(sign + value);
-
-        return { string: sign + string, value: value };
-    }
-
-    function getBankTimePoints() {
-        bankGMT = getGMT(workingHours.from);
-        var dayStart = '2016-10-09T18:00:00' + bankGMT.string;
-        var dayEnd = '2016-10-13T10:00:00' + bankGMT.string;
-
-        timePoints.push(
-            { type: 'from', time: dayStart, value: Date.parse(dayStart), label: 'Bank' },
-            { type: 'to', time: dayEnd, value: Date.parse(dayEnd), label: 'Bank' }
-        );
-
-        Object.keys(WEEK).forEach(function (day) {
-            var open = day + ' ' + workingHours.from;
-            var close = day + ' ' + workingHours.to;
-
-            timePoints.push(
-                { type: 'to', time: open, value: convertTime(open), label: 'Bank' },
-                { type: 'from', time: close, value: convertTime(close), label: 'Bank' }
-            );
         });
     }
 
@@ -169,14 +178,16 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          */
         format: function (template) {
             if (robberyTimePoints.length !== 0) {
-                var time = new Date(robberyTimePoints[index].value + bankGMT.value * HOUR);
-                var day = robberyTimePoints[index].time.match(/^[А-Я][А-Я]/)[0];
-                time = time.toUTCString().match(/\d\d:\d\d/)[0];
+                var date = robberyTimePoints[index].time;
 
                 var dayRE = RegExp('(%[D][D])');
-                var timeRE = RegExp('(%[H][H]:%[M][M])');
+                var hoursRE = RegExp('(%[H][H])');
+                var minutesRE = RegExp('(%[M][M])');
 
-                return template.replace(dayRE, day).replace(timeRE, time);
+                return template
+                    .replace(dayRE, date.day)
+                    .replace(hoursRE, date.hours)
+                    .replace(minutesRE, date.minutes);
             }
 
             return '';
@@ -188,17 +199,6 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         tryLater: function () {
-            if (index + 2 < robberyTimePoints.length) {
-                var time = robberyTimePoints[index + 1].value - robberyTimePoints[index].value;
-                if (time >= duration + HOUR / 2) {
-                    robberyTimePoints[index].value += HOUR / 2;
-
-                    return true;
-                }
-                index += 2;
-
-                return true;
-            }
 
             return false;
         }
