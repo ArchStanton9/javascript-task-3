@@ -6,6 +6,14 @@
  */
 exports.isStar = true;
 
+var WEEK = {
+    ПН: 'Mon, 10 ',
+    ВТ: 'Tue, 11 ',
+    СР: 'Wed, 12 '
+};
+
+var HOUR = 60 * 60 * 1000;
+
 /**
  * @param {Object} schedule – Расписание Банды
  * @param {Number} duration - Время на ограбление в минутах
@@ -19,13 +27,8 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
 
     var timePoints = []; // TimePoint.Keys: type, time, value, label
     var robberyTimePoints = [];
+    var bankGMT;
     duration = duration * 60 * 1000;
-
-    var WEEK = {
-        ПН: 'Mon, 10 ',
-        ВТ: 'Tue, 11 ',
-        СР: 'Wed, 12 '
-    };
 
     function convertTime(time) {
         var day = time.match(/^[А-Я][А-Я]/);
@@ -50,9 +53,10 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     }
 
     function getBankTimePoints() {
-        var GMT = workingHours.to.match(/\d$/)[0];
-        var dayStart = 'ПН 00:00+' + GMT;
-        var dayEnd = 'СР 23:59+' + GMT;
+        bankGMT = workingHours.to.match(/[\+]\d$/)[0];
+        var dayStart = 'ПН 00:00' + bankGMT;
+        var dayEnd = 'СР 23:59' + bankGMT;
+        bankGMT = parseInt(bankGMT);
 
         timePoints.push(
             { type: 'from', time: dayStart, value: convertTime(dayStart), label: 'Bank' },
@@ -149,9 +153,9 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          */
         format: function (template) {
             if (robberyTimePoints.length !== 0) {
-                var time = new Date(robberyTimePoints[index].value);
+                var time = new Date(robberyTimePoints[index].value + bankGMT * HOUR);
                 var day = robberyTimePoints[index].time.match(/^[А-Я][А-Я]/)[0];
-                time = time.toTimeString().match(/\d\d:\d\d/)[0];
+                time = time.toUTCString().match(/\d\d:\d\d/)[0];
 
                 var dayRE = RegExp('(%[D][D])');
                 var timeRE = RegExp('(%[H][H]:%[M][M])');
@@ -168,11 +172,10 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         tryLater: function () {
-
             if (index + 2 < robberyTimePoints.length) {
                 var time = robberyTimePoints[index + 1].value - robberyTimePoints[index].value;
-                if (time >= duration + 30 * 60 * 1000) {
-                    robberyTimePoints[index].value += 30 * 60 * 1000;
+                if (time >= duration + HOUR / 2) {
+                    robberyTimePoints[index].value += HOUR / 2;
 
                     return true;
                 }
