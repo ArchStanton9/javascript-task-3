@@ -4,7 +4,7 @@
  * Сделано задание на звездочку
  * Реализовано оба метода и tryLater
  */
-exports.isStar = false;
+exports.isStar = true;
 
 /**
  * @param {Object} schedule – Расписание Банды
@@ -18,6 +18,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     console.info(schedule, duration, workingHours);
 
     var timePoints = []; // TimePoint.Keys: type, time, value, label
+    var robberyTimePoints = [];
     duration = duration * 60 * 1000;
 
     var WEEK = {
@@ -35,22 +36,21 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
         return Date.parse(day + time);
     }
 
-    Object.keys(schedule).forEach(function (robber) {
-        schedule[robber].forEach(function (busyTime) {
-            timePoints.push(
-                { type: 'from', time: busyTime.from, value: convertTime(busyTime.from),
-                    label: robber },
-                { type: 'to', time: busyTime.to, value: convertTime(busyTime.to),
-                    label: robber }
-            );
+    function getGangTimePoints() {
+        Object.keys(schedule).forEach(function (robber) {
+            schedule[robber].forEach(function (busyTime) {
+                timePoints.push(
+                    { type: 'from', time: busyTime.from, value: convertTime(busyTime.from),
+                        label: robber },
+                    { type: 'to', time: busyTime.to, value: convertTime(busyTime.to),
+                        label: robber }
+                );
+            });
         });
-    });
-
-    getBankTimePoints();
+    }
 
     function getBankTimePoints() {
         var GMT = workingHours.to.match(/\d$/)[0];
-
         var dayStart = 'ПН 00:00+' + GMT;
         var dayEnd = 'СР 23:59+' + GMT;
 
@@ -60,7 +60,6 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
         );
 
         Object.keys(WEEK).forEach(function (day) {
-
             var open = day + ' ' + workingHours.from;
             var close = day + ' ' + workingHours.to;
 
@@ -71,27 +70,28 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
         });
     }
 
-    timePoints.sort(function (a, b) {
-        if (a.value < b.value) {
-            return -1;
-        }
-        if (a.value > b.value) {
-            return 1;
-        }
+    function getTimePoints() {
+        getBankTimePoints();
+        getGangTimePoints();
+        timePoints.sort(function (a, b) {
+            if (a.value < b.value) {
+                return -1;
+            }
+            if (a.value > b.value) {
+                return 1;
+            }
 
-        return 0;
-    });
+            return 0;
+        });
+    }
 
-    timePoints = findRobberyTime();
-
-    function findRobberyTime() {
-        var robberyTime = [];
+    function getRobberyTimePoints() {
         var stack = [];
 
         timePoints.forEach(function (point) {
             if (point.type === 'from') {
-                if (robberyTime.length % 2 !== 0) {
-                    robberyTime.push(point);
+                if (robberyTimePoints.length % 2 !== 0) {
+                    robberyTimePoints.push(point);
                 }
                 stack.push(point);
             }
@@ -102,13 +102,29 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
                 });
 
                 if (stack.length === 0) {
-                    robberyTime.push(point);
+                    robberyTimePoints.push(point);
                 }
             }
         });
 
-        return robberyTime;
+        robberyTimePoints = selectRobberyTimePoints();
     }
+
+    function selectRobberyTimePoints() {
+        var points = [];
+        for (var i = 0; i < robberyTimePoints.length - 1; i += 2) {
+            if (robberyTimePoints[i + 1].value - robberyTimePoints[i].value >= duration) {
+                points.push(robberyTimePoints[i]);
+                points.push(robberyTimePoints[i + 1]);
+            }
+        }
+
+        return points;
+    }
+
+    getTimePoints();
+    getRobberyTimePoints();
+    var index = 0;
 
     return {
 
@@ -117,14 +133,11 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         exists: function () {
-
-            for (var i = 0; i < timePoints.length - 1; i += 2) {
-                if (timePoints[i + 1].value - timePoints[i].value >= duration) {
-                    return true;
-                }
+            if (robberyTimePoints.length === 0) {
+                return false;
             }
 
-            return false;
+            return true;
         },
 
         /**
@@ -135,17 +148,15 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {String}
          */
         format: function (template) {
-            for (var i = 0; i < timePoints.length - 1; i += 2) {
-                if (timePoints[i + 1].value - timePoints[i].value >= duration) {
-                    var time = new Date(timePoints[i].value);
-                    var day = timePoints[i].time.match(/^[А-Я][А-Я]/)[0];
-                    time = time.toTimeString().match(/\d\d:\d\d/)[0];
+            if (robberyTimePoints.length !== 0) {
+                var time = new Date(robberyTimePoints[index].value);
+                var day = robberyTimePoints[index].time.match(/^[А-Я][А-Я]/)[0];
+                time = time.toTimeString().match(/\d\d:\d\d/)[0];
 
-                    var dayRE = RegExp('(%[D][D])');
-                    var timeRE = RegExp('(%[H][H]:%[M][M])');
+                var dayRE = RegExp('(%[D][D])');
+                var timeRE = RegExp('(%[H][H]:%[M][M])');
 
-                    return template.replace(dayRE, day).replace(timeRE, time);
-                }
+                return template.replace(dayRE, day).replace(timeRE, time);
             }
 
             return '';
@@ -157,6 +168,19 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         tryLater: function () {
+
+            if (index + 2 < robberyTimePoints.length) {
+                var time = robberyTimePoints[index + 1].value - robberyTimePoints[index].value;
+                if (time >= duration + 30 * 60 * 1000) {
+                    robberyTimePoints[index].value += 30 * 60 * 1000;
+
+                    return true;
+                }
+                index += 2;
+
+                return true;
+            }
+
             return false;
         }
     };
