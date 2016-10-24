@@ -7,12 +7,13 @@
 exports.isStar = true;
 
 var WEEK = {
-    ПН: 'Mon, 10 ',
-    ВТ: 'Tue, 11 ',
-    СР: 'Wed, 12 '
+    ПН: 10,
+    ВТ: 11,
+    СР: 12
 };
 
 var HOUR = 60 * 60 * 1000;
+var bankGMT;
 
 /**
  * @param {Object} schedule – Расписание Банды
@@ -27,16 +28,16 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
 
     var timePoints = []; // TimePoint.Keys: type, time, value, label
     var robberyTimePoints = [];
-    var bankGMT;
     duration = duration * 60 * 1000;
 
     function convertTime(time) {
         var day = time.match(/^[А-Я][А-Я]/);
         day = WEEK[day];
-        time = time.replace(/^([А-Я][А-Я]\s)(\d\d:\d\d)(\+)(\d)$/, 'Oct 2016 $2:00 +0$400');
-        // format: Mon, 10 Oct 2016 13:30:00 +0500
+        var hour = time.match(/\d\d:\d\d/);
+        time = '2016-10-' + day + 'T' + hour + ':00' + getGMT(time).string;
+        // 2016-10-10T08:15:00-05:00
 
-        return Date.parse(day + time);
+        return Date.parse(time);
     }
 
     function getGangTimePoints() {
@@ -52,15 +53,30 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
         });
     }
 
+    function getGMT(time) {
+        var sign;
+        var value;
+        try {
+            sign = time.match(/[\+\-]/)[0];
+            value = time.match(/\d$/)[0];
+        } catch (err) {
+            return { string: '', value: 0 };
+        }
+        var string = value > 10 ? value : ('0' + value);
+        string += ':00';
+        value = parseInt(sign + value);
+
+        return { string: sign + string, value: value };
+    }
+
     function getBankTimePoints() {
-        bankGMT = workingHours.to.match(/[\+]\d$/)[0];
-        var dayStart = 'ПН 00:00' + bankGMT;
-        var dayEnd = 'СР 23:59' + bankGMT;
-        bankGMT = parseInt(bankGMT);
+        bankGMT = getGMT(workingHours.from);
+        var dayStart = '2016-10-09T18:00:00' + bankGMT.string;
+        var dayEnd = '2016-10-13T10:00:00' + bankGMT.string;
 
         timePoints.push(
-            { type: 'from', time: dayStart, value: convertTime(dayStart), label: 'Bank' },
-            { type: 'to', time: dayEnd, value: convertTime(dayEnd), label: 'Bank' }
+            { type: 'from', time: dayStart, value: Date.parse(dayStart), label: 'Bank' },
+            { type: 'to', time: dayEnd, value: Date.parse(dayEnd), label: 'Bank' }
         );
 
         Object.keys(WEEK).forEach(function (day) {
@@ -153,7 +169,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          */
         format: function (template) {
             if (robberyTimePoints.length !== 0) {
-                var time = new Date(robberyTimePoints[index].value + bankGMT * HOUR);
+                var time = new Date(robberyTimePoints[index].value + bankGMT.value * HOUR);
                 var day = robberyTimePoints[index].time.match(/^[А-Я][А-Я]/)[0];
                 time = time.toUTCString().match(/\d\d:\d\d/)[0];
 
