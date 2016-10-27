@@ -182,7 +182,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     duration *= MINUTE;
     bankUTC = getUTC(workingHours.from);
 
-    timePoints = timePoints.concat(getTimePoints(schedule, workingHours));
+    timePoints = getTimePoints(schedule, workingHours);
     robberyTimePoints = getRobberyTimePoints(timePoints, duration);
 
     return {
