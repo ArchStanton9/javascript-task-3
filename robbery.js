@@ -19,6 +19,7 @@ var EN_RU_WEEK = {
 };
 
 var HOUR = 60 * 60 * 1000;
+var MINUTE = 60 * 1000;
 var bankUTC;
 
 /**
@@ -29,31 +30,36 @@ var bankUTC;
  * @returns {Object}
  */
 function getTimePoint(busyTime, type, label) {
-    function getTime(value) {
-        value += bankUTC.value * HOUR;
-        var date = new Date(value).toUTCString();
-        var day = date.match(/^[a-z]{3}/i)[0];
-        var time = date.match(/\d\d:\d\d:\d\d/)[0];
-
-        return {
-            day: EN_RU_WEEK[day],
-            hours: time.match(/\d\d/g)[0],
-            minutes: time.match(/\d\d/g)[1]
-        };
-    }
-
-    var day = busyTime.match(/^[А-Я][А-Я]/)[0];
+    var day = busyTime.match(/^[А-Я]{2}/)[0];
     day = WEEK[day];
-    var hour = busyTime.match(/\d\d:\d\d/);
-    busyTime = '2016-10-' + day + 'T' + hour + ':00' + getUTC(busyTime).toString();
+    var time = busyTime.match(/\d{2}:\d{2}/);
+    busyTime = ['2016-10-', day, 'T', time, ':00', getUTC(busyTime).toString()].join('');
     var value = Date.parse(busyTime);
-    var time = getTime(value);
+    time = getTime(value);
 
     return {
         type: type,
         label: label,
         time: time,
         value: value
+    };
+}
+
+/**
+ * Возвращает время в часовом поясе банка
+ * @param {Number} value – кол-во миллисекунд прошедших с 1 января 1970 года 00:00:00 по UTC.
+ * @returns {Object}
+ */
+function getTime(value) {
+    value += bankUTC.value * HOUR;
+    var date = new Date(value).toUTCString();
+    var day = date.match(/^[a-z]{3}/i)[0];
+    var time = date.match(/\d{2}:\d{2}:\d{2}/)[0];
+
+    return {
+        day: EN_RU_WEEK[day],
+        hours: time.match(/\d{2}/g)[0],
+        minutes: time.match(/\d{2}/g)[1]
     };
 }
 
@@ -80,14 +86,15 @@ function getUTC(time) {
 }
 
 /**
- * Создает массив временных отметок банка
+ * Создает массив временных отметок Банды
+ * @param {Object} schedule – Расписание Банды
  * @param {String} workingHours – Время работы банка
  * @returns {Object[]}
  */
-function getBankTimePoints(workingHours) {
+function getTimePoints(schedule, workingHours) {
     var timePoints = [];
-    var dayStart = 'ПН 00:00+' + bankUTC.value;
-    var dayEnd = 'СР 23:59+' + bankUTC.value;
+    var dayStart = ['ПН 00:00', bankUTC.value].join('+');
+    var dayEnd = ['СР 23:59', bankUTC.value].join('+');
 
     timePoints.push(
         getTimePoint(dayStart, 'from', 'Bank'),
@@ -104,16 +111,6 @@ function getBankTimePoints(workingHours) {
         );
     });
 
-    return timePoints;
-}
-
-/**
- * Создает массив временных отметок Банды
- * @param {Object} schedule – Расписание Банды
- * @returns {Object[]}
- */
-function getGangTimePoints(schedule) {
-    var timePoints = [];
     Object.keys(schedule).forEach(function (robber) {
         schedule[robber].forEach(function (busyTime) {
             timePoints.push(
@@ -134,23 +131,17 @@ function getGangTimePoints(schedule) {
  */
 function getRobberyTimePoints(timePoints, duration) {
     var stack = [];
+    var freeTimePoints = [];
     var robberyTimePoints = [];
 
     timePoints.sort(function (a, b) {
-        if (a.value < b.value) {
-            return -1;
-        }
-        if (a.value > b.value) {
-            return 1;
-        }
-
-        return 0;
+        return Math.sign(a.value - b.value);
     });
 
     timePoints.forEach(function (point) {
         if (point.type === 'from') {
-            if (robberyTimePoints.length % 2 !== 0) {
-                robberyTimePoints.push(point);
+            if (freeTimePoints.length % 2 !== 0) {
+                freeTimePoints.push(point);
             }
             stack.push(point);
         }
@@ -161,24 +152,18 @@ function getRobberyTimePoints(timePoints, duration) {
             });
 
             if (stack.length === 0) {
-                robberyTimePoints.push(point);
+                freeTimePoints.push(point);
             }
         }
     });
 
-    function selectByDuration() {
-        var points = [];
-        for (var i = 0; i < robberyTimePoints.length - 1; i += 2) {
-            if (robberyTimePoints[i + 1].value - robberyTimePoints[i].value >= duration) {
-                points.push(robberyTimePoints[i]);
-                points.push(robberyTimePoints[i + 1]);
-            }
+    for (var i = 0; i < freeTimePoints.length - 1; i += 2) {
+        if (freeTimePoints[i + 1].value - freeTimePoints[i].value >= duration) {
+            robberyTimePoints.push(freeTimePoints[i], freeTimePoints[i + 1]);
         }
-
-        return points;
     }
 
-    return selectByDuration();
+    return robberyTimePoints;
 }
 
 /**
@@ -194,11 +179,10 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
 
     var timePoints = []; // TimePoint.Keys: type, time, value, label
     var robberyTimePoints = [];
-    duration = duration * 60 * 1000;
+    duration *= MINUTE;
     bankUTC = getUTC(workingHours.from);
 
-    timePoints = timePoints.concat(getBankTimePoints(workingHours));
-    timePoints = timePoints.concat(getGangTimePoints(schedule));
+    timePoints = timePoints.concat(getTimePoints(schedule, workingHours));
     robberyTimePoints = getRobberyTimePoints(timePoints, duration);
 
     return {
@@ -224,16 +208,12 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          */
         format: function (template) {
             if (robberyTimePoints.length !== 0) {
-                var date = robberyTimePoints[0].time;
-
-                var dayRE = RegExp('(%[D][D])');
-                var hoursRE = RegExp('(%[H][H])');
-                var minutesRE = RegExp('(%[M][M])');
+                var time = robberyTimePoints[0].time;
 
                 return template
-                    .replace(dayRE, date.day)
-                    .replace(hoursRE, date.hours)
-                    .replace(minutesRE, date.minutes);
+                    .replace(/(%[D][D])/, time.day)
+                    .replace(/(%[H][H])/, time.hours)
+                    .replace(/(%[M][M])/, time.minutes);
             }
 
             return '';
