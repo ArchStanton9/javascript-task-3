@@ -102,8 +102,8 @@ function getTimePoints(schedule, workingHours) {
     );
 
     Object.keys(WEEK).forEach(function (day) {
-        var open = day + ' ' + workingHours.from;
-        var close = day + ' ' + workingHours.to;
+        var open = [day, workingHours.from].join(' ');
+        var close = [day, workingHours.to].join(' ');
 
         timePoints.push(
             getTimePoint(close, 'from', 'Bank'),
