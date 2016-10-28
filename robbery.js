@@ -80,7 +80,7 @@ function getUTC(time) {
     return {
         value: value,
         toString: function () {
-            return '+' + UTC + '00';
+            return ['+', UTC, '00'].join('');
         }
     };
 }
@@ -139,21 +139,26 @@ function getRobberyTimePoints(timePoints, duration) {
     });
 
     timePoints.forEach(function (point) {
-        if (point.type === 'from') {
-            if (freeTimePoints.length % 2 !== 0) {
-                freeTimePoints.push(point);
-            }
-            stack.push(point);
-        }
+        switch (point.type) {
+            case 'from':
+                if (freeTimePoints.length % 2 !== 0) {
+                    freeTimePoints.push(point);
+                }
+                stack.push(point);
+                break;
 
-        if (point.type === 'to') {
-            stack = stack.filter(function (item) {
-                return point.label !== item.label;
-            });
+            case 'to':
+                stack = stack.filter(function (item) {
+                    return point.label !== item.label;
+                });
 
-            if (stack.length === 0) {
-                freeTimePoints.push(point);
-            }
+                if (stack.length === 0) {
+                    freeTimePoints.push(point);
+                }
+                break;
+
+            default:
+                break;
         }
     });
 
@@ -175,8 +180,6 @@ function getRobberyTimePoints(timePoints, duration) {
  * @returns {Object}
  */
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
-    console.info(schedule, duration, workingHours);
-
     var timePoints = []; // TimePoint.Keys: type, time, value, label
     var robberyTimePoints = [];
     duration *= MINUTE;
