@@ -60,8 +60,8 @@ function getTime(value) {
 
     return {
         day: WEEK[day],
-        hour: hour,
-        minute: minute
+        hour: hour > 10 ? hour.toString() : '0' + hour,
+        minute: minute > 10 ? minute.toString() : '0' + minute
     };
 
 }
