@@ -85,8 +85,8 @@ function getUTC(time) {
  */
 function getTimePoints(schedule, workingHours) {
     var timePoints = [];
-    var dayStart = ['ПН 00:00', bankUTC.value].join('+');
-    var dayEnd = ['СР 23:59', bankUTC.value].join('+');
+    var dayStart = ['ПН 00:00', bankUTC].join('+');
+    var dayEnd = ['СР 23:59', bankUTC].join('+');
 
     timePoints.push(
         getTimePoint(dayStart, 'from', 'Bank'),
