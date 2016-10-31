@@ -6,20 +6,10 @@
  */
 exports.isStar = false;
 
-var WEEK = {
-    ПН: 10,
-    ВТ: 11,
-    СР: 12
-};
+var WEEK = ['ПН', 'ВТ', 'СР'];
 
-var EN_RU_WEEK = {
-    Mon: 'ПН',
-    Tue: 'ВТ',
-    Wed: 'СР'
-};
-
-var HOUR = 60 * 60 * 1000;
-var MINUTE = 60 * 1000;
+var DAY = 1440;
+var HOUR = 60;
 var bankUTC;
 
 /**
@@ -30,59 +20,61 @@ var bankUTC;
  * @returns {Object}
  */
 function getTimePoint(busyTime, type, label) {
-    var day = busyTime.match(/^[А-Я]{2}/)[0];
-    day = WEEK[day];
-    var time = busyTime.match(/\d{2}:\d{2}/);
-    busyTime = ['2016-10-', day, 'T', time, ':00', getUTC(busyTime).toString()].join('');
-    var value = Date.parse(busyTime);
-    time = getTime(value);
-
     return {
         type: type,
         label: label,
-        time: time,
-        value: value
+        value: getTimeValue(busyTime)
     };
+}
+
+/**
+ * Конверирует время в чиловое значение минут, прошедших с начала недели
+ * @param {String} time – Время в формате 'ПН 10:00+5'
+ * @returns {Number}
+ */
+function getTimeValue(time) {
+    var day = time.match(/^[А-Я]{2}/)[0];
+    var hour = time.match(/\d{2}/g)[0];
+    var minute = time.match(/\d{2}/g)[1];
+
+    return [
+        DAY * WEEK.indexOf(day),
+        HOUR * parseInt(hour, 10),
+        parseInt(minute, 10),
+        HOUR * (bankUTC - getUTC(time))
+    ].reduce(function (a, b) {
+        return a + b;
+    });
 }
 
 /**
  * Возвращает время в часовом поясе банка
- * @param {Number} value – кол-во миллисекунд прошедших с 1 января 1970 года 00:00:00 по UTC.
+ * @param {Number} value – кол-во минут прошедших с начала недели
  * @returns {Object}
  */
 function getTime(value) {
-    value += bankUTC.value * HOUR;
-    var date = new Date(value).toUTCString();
-    var day = date.match(/^[a-z]{3}/i)[0];
-    var time = date.match(/\d{2}:\d{2}:\d{2}/)[0];
+    var day = Math.floor(value / DAY);
+    value = value % DAY;
+    var hour = Math.floor(value / HOUR);
+    var minute = value % HOUR;
 
     return {
-        day: EN_RU_WEEK[day],
-        hours: time.match(/\d{2}/g)[0],
-        minutes: time.match(/\d{2}/g)[1]
+        day: WEEK[day],
+        hour: hour,
+        minute: minute
     };
+
 }
 
 /**
- * Возвращает Object со свойством value и методом toString,
- * который вернет часовой пояс в формате ISO 8601 (например +0500).
+ * Возвращает часовой пояс полученного времени
  * @param {String} time – Время события, например 'ПН 10:00+5'
- * @returns {Object}
+ * @returns {Number}
  */
 function getUTC(time) {
-    var UTC = time.match(/\d$/);
-    if (UTC === null) {
-        return '';
-    }
-    var value = parseInt(UTC);
-    UTC = UTC[0].length > 1 ? UTC : '0' + UTC;
+    var UTC = time.split('+')[1];
 
-    return {
-        value: value,
-        toString: function () {
-            return ['+', UTC, '00'].join('');
-        }
-    };
+    return parseInt(UTC, 10);
 }
 
 /**
@@ -101,7 +93,7 @@ function getTimePoints(schedule, workingHours) {
         getTimePoint(dayEnd, 'to', 'Bank')
     );
 
-    Object.keys(WEEK).forEach(function (day) {
+    WEEK.forEach(function (day) {
         var open = [day, workingHours.from].join(' ');
         var close = [day, workingHours.to].join(' ');
 
@@ -135,7 +127,7 @@ function getRobberyTimePoints(timePoints, duration) {
     var robberyTimePoints = [];
 
     timePoints.sort(function (a, b) {
-        return Math.sign(a.value - b.value);
+        return a.value - b.value;
     });
 
     timePoints.forEach(function (point) {
@@ -182,7 +174,6 @@ function getRobberyTimePoints(timePoints, duration) {
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     var timePoints = []; // TimePoint.Keys: type, time, value, label
     var robberyTimePoints = [];
-    duration *= MINUTE;
     bankUTC = getUTC(workingHours.from);
 
     timePoints = getTimePoints(schedule, workingHours);
@@ -195,11 +186,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         exists: function () {
-            if (robberyTimePoints.length === 0) {
-                return false;
-            }
-
-            return true;
+            return Boolean(robberyTimePoints.length);
         },
 
         /**
@@ -210,13 +197,13 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {String}
          */
         format: function (template) {
-            if (robberyTimePoints.length !== 0) {
-                var time = robberyTimePoints[0].time;
+            if (robberyTimePoints.length) {
+                var time = getTime(robberyTimePoints[0].value);
 
                 return template
                     .replace(/(%[D][D])/, time.day)
-                    .replace(/(%[H][H])/, time.hours)
-                    .replace(/(%[M][M])/, time.minutes);
+                    .replace(/(%[H][H])/, time.hour)
+                    .replace(/(%[M][M])/, time.minute);
             }
 
             return '';
